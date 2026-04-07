@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Remote Desktop · 시작하기</title>
+<style>
+:root{
+    --bg-0:#0b0d12;
+    --bg-1:#10131a;
+    --bg-2:#161a23;
+    --surface:rgba(255,255,255,.04);
+    --surface-hi:rgba(255,255,255,.07);
+    --border:rgba(255,255,255,.08);
+    --border-hi:rgba(255,255,255,.14);
+    --text:#f0f3f8;
+    --text-2:#9aa3b2;
+    --text-3:#5d6675;
+    --accent:#4f8cff;
+    --accent-hi:#6ba0ff;
+    --accent-soft:rgba(79,140,255,.12);
+    --ok:#3fc55c;
+    --ok-soft:rgba(63,197,92,.12);
+    --warn:#e5a23a;
+    --warn-soft:rgba(229,162,58,.12);
+    --err:#ef5552;
+    --err-soft:rgba(239,85,82,.12);
+    --shadow-md:0 8px 24px rgba(0,0,0,.4);
+    --shadow-lg:0 24px 60px rgba(0,0,0,.5);
+    --radius-sm:8px;
+    --radius:12px;
+    --radius-lg:16px;
+}
+
+*{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased}
+html,body{height:100%}
+body{
+    font-family:-apple-system,"SF Pro Display","SF Pro Text",BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    background:
+        radial-gradient(1200px 600px at 20% -10%, rgba(79,140,255,.10), transparent 60%),
+        radial-gradient(900px 500px at 100% 100%, rgba(132,79,255,.08), transparent 60%),
+        var(--bg-0);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;flex-direction:column;
+    font-size:14px;line-height:1.5;
+    letter-spacing:-0.01em;
+}
+
+/* ─── 진행 바 ─── */
+.progress{
+    position:fixed;top:0;left:0;right:0;height:3px;
+    background:rgba(255,255,255,.04);
+    z-index:10;
+}
+.progress-fill{
+    height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-hi));
+    width:0%;transition:width .4s cubic-bezier(.4,0,.2,1);
+    box-shadow:0 0 8px rgba(79,140,255,.5);
+}
+
+/* ─── 상단 단계 ─── */
+.steps{
+    display:flex;justify-content:center;gap:6px;
+    padding:32px 0 0;
+}
+.steps .dot{
+    width:24px;height:5px;border-radius:3px;
+    background:rgba(255,255,255,.08);
+    transition:all .3s;
+}
+.steps .dot.done{background:var(--accent)}
+.steps .dot.current{background:var(--accent);width:32px}
+
+/* ─── 중앙 카드 ─── */
+.stage{
+    flex:1;display:flex;align-items:center;justify-content:center;
+    padding:32px 20px;
+}
+.card{
+    width:100%;max-width:520px;
+    animation:fadein .35s cubic-bezier(.4,0,.2,1);
+}
+@keyframes fadein{
+    from{opacity:0;transform:translateY(8px)}
+    to{opacity:1;transform:translateY(0)}
+}
+
+.eyebrow{
+    color:var(--text-3);font-size:11px;font-weight:600;
+    text-transform:uppercase;letter-spacing:.12em;margin-bottom:10px;
+}
+h1{
+    font-size:28px;line-height:1.2;font-weight:700;
+    margin-bottom:10px;letter-spacing:-.02em;
+}
+.lead{color:var(--text-2);font-size:15px;line-height:1.55;margin-bottom:28px}
+
+/* ─── 폼 요소 ─── */
+.field{margin-bottom:14px}
+.field label{
+    display:block;font-size:12px;font-weight:500;
+    color:var(--text-2);margin-bottom:6px;
+}
+.field-row{display:flex;gap:10px}
+.field-row > *{flex:1}
+
+input[type=text],input[type=password],input[type=number]{
+    width:100%;padding:11px 14px;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius-sm);
+    color:var(--text);font-size:14px;font-family:inherit;
+    outline:none;transition:border-color .15s, background .15s;
+}
+input:hover{background:var(--surface-hi)}
+input:focus{border-color:var(--accent);background:var(--surface-hi)}
+input::placeholder{color:var(--text-3)}
+
+/* 비밀번호 강도 미터 */
+.meter{
+    height:3px;background:rgba(255,255,255,.06);border-radius:2px;
+    overflow:hidden;margin-top:8px;
+}
+.meter-fill{
+    height:100%;width:0%;
+    background:var(--err);
+    transition:width .25s, background .25s;
+}
+.meter-text{
+    font-size:11px;color:var(--text-3);margin-top:6px;
+    height:14px;
+}
+
+/* 버튼 */
+.btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;
+    padding:11px 18px;
+    border:1px solid transparent;border-radius:var(--radius-sm);
+    background:var(--accent);color:#fff;
+    font-size:14px;font-weight:600;font-family:inherit;
+    cursor:pointer;
+    transition:transform .1s, background .15s, opacity .15s;
+}
+.btn:hover{background:var(--accent-hi)}
+.btn:active{transform:scale(.97)}
+.btn:disabled{background:var(--text-3);cursor:not-allowed;opacity:.6}
+.btn.ghost{
+    background:transparent;border-color:var(--border);color:var(--text);
+}
+.btn.ghost:hover{background:var(--surface);border-color:var(--border-hi)}
+.btn.subtle{
+    background:var(--surface);border-color:var(--border);color:var(--text);
+    padding:8px 14px;font-size:13px;
+}
+.btn.subtle:hover{background:var(--surface-hi);border-color:var(--border-hi)}
+.btn.lg{padding:13px 22px;font-size:15px}
+
+/* 푸터 */
+.actions{
+    display:flex;justify-content:space-between;align-items:center;
+    margin-top:28px;gap:12px;
+}
+.actions .left,.actions .right{display:flex;gap:10px;align-items:center}
+.skip{
+    background:none;border:none;color:var(--text-2);font-size:13px;
+    cursor:pointer;padding:8px;font-family:inherit;
+}
+.skip:hover{color:var(--text)}
+
+/* 메시지 */
+.msg{
+    padding:10px 12px;border-radius:var(--radius-sm);font-size:13px;
+    margin-top:10px;display:none;
+    animation:fadein .2s;
+}
+.msg.ok{display:flex;align-items:center;gap:8px;background:var(--ok-soft);color:#7ed896;border:1px solid rgba(63,197,92,.3)}
+.msg.err{display:flex;align-items:center;gap:8px;background:var(--err-soft);color:#ff8a87;border:1px solid rgba(239,85,82,.3)}
+.msg.info{display:flex;align-items:center;gap:8px;background:var(--accent-soft);color:#a8c5ff;border:1px solid rgba(79,140,255,.3)}
+
+/* 스피너 */
+.spin{
+    width:14px;height:14px;border-radius:50%;
+    border:2px solid currentColor;border-right-color:transparent;
+    animation:spin .7s linear infinite;display:inline-block;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* 도움말 링크 */
+.helper{
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius-sm);padding:14px;margin-bottom:18px;
+    font-size:13px;color:var(--text-2);line-height:1.6;
+}
+.helper strong{color:var(--text);font-weight:600}
+.helper ol{margin:8px 0 0 20px}
+.helper li{margin-bottom:4px}
+.helper code{
+    background:rgba(255,255,255,.06);padding:1px 6px;border-radius:4px;
+    font-size:12px;font-family:"SF Mono",ui-monospace,monospace;
+    color:#e0e8f5;
+}
+.helper a{color:var(--accent);text-decoration:none}
+.helper a:hover{text-decoration:underline}
+
+/* 권한 카드 */
+.perm{
+    display:flex;align-items:center;gap:14px;
+    padding:14px 16px;
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius);margin-bottom:10px;
+    transition:all .2s;
+}
+.perm.ok{background:var(--ok-soft);border-color:rgba(63,197,92,.3)}
+.perm.warn{background:var(--warn-soft);border-color:rgba(229,162,58,.3)}
+.perm-icon{
+    width:36px;height:36px;border-radius:10px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:18px;flex-shrink:0;
+    background:rgba(255,255,255,.06);
+}
+.perm.ok .perm-icon{background:rgba(63,197,92,.18)}
+.perm.warn .perm-icon{background:rgba(229,162,58,.18)}
+.perm-body{flex:1;min-width:0}
+.perm-title{font-size:14px;font-weight:600;color:var(--text)}
+.perm-sub{font-size:12px;color:var(--text-2);margin-top:2px}
+
+/* 환영 화면 */
+.welcome{text-align:center;padding:20px 0}
+.welcome .glyph{
+    width:88px;height:88px;border-radius:24px;
+    background:linear-gradient(135deg,var(--accent),#7e5cff);
+    display:flex;align-items:center;justify-content:center;
+    font-size:42px;margin:0 auto 24px;
+    box-shadow:0 16px 40px rgba(79,140,255,.4);
+}
+.welcome h1{font-size:32px}
+.welcome .lead{font-size:16px;max-width:380px;margin:0 auto 28px}
+.feature-list{
+    text-align:left;display:grid;gap:12px;margin:0 auto 28px;max-width:360px;
+}
+.feature{
+    display:flex;align-items:flex-start;gap:12px;
+    font-size:13px;color:var(--text-2);
+}
+.feature .check{
+    width:20px;height:20px;border-radius:50%;
+    background:var(--accent-soft);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;font-size:11px;font-weight:700;
+}
+
+/* 완료 화면 */
+.done-card{text-align:center;padding:20px 0}
+.done-card .glyph{
+    width:88px;height:88px;border-radius:50%;
+    background:var(--ok-soft);
+    display:flex;align-items:center;justify-content:center;
+    font-size:44px;margin:0 auto 24px;
+    border:2px solid rgba(63,197,92,.4);
+    animation:pop .5s cubic-bezier(.4,1.6,.5,1);
+}
+@keyframes pop{
+    0%{transform:scale(.5);opacity:0}
+    100%{transform:scale(1);opacity:1}
+}
+
+/* 단계 컨테이너 (한 번에 하나만 표시) */
+.step{display:none}
+.step.active{display:block}
+
+/* 푸터 미니 */
+.footnote{
+    text-align:center;color:var(--text-3);
+    font-size:11px;padding:20px 0;
+}
+
+/* 모바일 */
+@media(max-width:560px){
+    h1{font-size:24px}
+    .welcome h1{font-size:28px}
+    .stage{padding:20px 16px}
+}
+</style>
+</head>
+<body>
+
+<div class="progress"><div class="progress-fill" id="progress-fill"></div></div>
+
+<div class="steps" id="steps"></div>
+
+<div class="stage">
+    <div class="card">
+
+    <!-- ─── 1. 환영 ─── -->
+    <div class="step active" data-step="welcome">
+        <div class="welcome">
+            <div class="glyph">🖥</div>
+            <h1>Remote Desktop에 오신 걸 환영해요</h1>
+            <p class="lead">처음 한 번만 셋업하면 그 다음부터는 바로 로그인 화면이 뜹니다. 1분이면 끝나요.</p>
+
+            <div class="feature-list">
+                <div class="feature">
+                    <span class="check">✓</span>
+                    <span>브라우저만 있으면 어디서든 접속</span>
+                </div>
+                <div class="feature">
+                    <span class="check">✓</span>
+                    <span>외부에서도 접속하고 싶다면 ngrok 자동 연동</span>
+                </div>
+                <div class="feature">
+                    <span class="check">✓</span>
+                    <span>접속 알림을 텔레그램으로 받기</span>
+                </div>
+            </div>
+
+            <button class="btn lg" data-next>시작하기 →</button>
+        </div>
+    </div>
+
+    <!-- ─── 2. 비밀번호 ─── -->
+    <div class="step" data-step="password">
+        <div class="eyebrow">1단계 · 필수</div>
+        <h1>비밀번호를 정해주세요</h1>
+        <p class="lead">로그인할 때 사용하는 비밀번호예요. 안전하게 보관해주세요. (한 번 저장된 후엔 복구할 수 없어요)</p>
+
+        <div class="field">
+            <label for="pw">비밀번호</label>
+            <input type="password" id="pw" placeholder="4자 이상" autocomplete="new-password" autofocus>
+            <div class="meter"><div class="meter-fill" id="meter-fill"></div></div>
+            <div class="meter-text" id="meter-text"></div>
+        </div>
+
+        <div class="field">
+            <label for="pw2">비밀번호 확인</label>
+            <input type="password" id="pw2" placeholder="다시 한 번 입력" autocomplete="new-password">
+        </div>
+
+        <div class="msg" id="pw-msg"></div>
+
+        <div class="actions">
+            <div class="left">
+                <button class="btn ghost" data-prev>← 뒤로</button>
+            </div>
+            <div class="right">
+                <button class="btn" data-next id="pw-next">다음 →</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── 3. ngrok ─── -->
+    <div class="step" data-step="ngrok">
+        <div class="eyebrow">2단계 · 선택</div>
+        <h1>외부에서도 접속할까요?</h1>
+        <p class="lead">집 밖(LTE/5G/다른 Wi-Fi)에서 접속하려면 ngrok 토큰이 필요해요. 같은 Wi-Fi 안에서만 쓸 거면 건너뛰어도 돼요.</p>
+
+        <div class="helper">
+            <strong>ngrok 토큰 받는 법</strong>
+            <ol>
+                <li><a href="https://dashboard.ngrok.com/signup" target="_blank" rel="noopener">ngrok.com 가입</a> (이메일/구글 계정, 무료)</li>
+                <li><a href="https://dashboard.ngrok.com/get-started/your-authtoken" target="_blank" rel="noopener">대시보드 → Your Authtoken</a></li>
+                <li>토큰 복사 → 아래 칸에 붙여넣기</li>
+            </ol>
+        </div>
+
+        <div class="field">
+            <label for="ngrok">Authtoken</label>
+            <input type="text" id="ngrok" placeholder="2abc1234567890_xxxxxxxxxxxxxxx">
+        </div>
+
+        <div class="msg" id="ngrok-msg"></div>
+
+        <div class="actions">
+            <div class="left">
+                <button class="btn ghost" data-prev>← 뒤로</button>
+                <button class="btn subtle" id="test-ngrok-btn">테스트</button>
+            </div>
+            <div class="right">
+                <button class="skip" data-next>건너뛰기</button>
+                <button class="btn" data-next>다음 →</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── 4. 텔레그램 ─── -->
+    <div class="step" data-step="telegram">
+        <div class="eyebrow">3단계 · 선택</div>
+        <h1>알림을 받을까요?</h1>
+        <p class="lead">서버 시작/외부 URL 변경 시 텔레그램으로 알림을 보내드려요. 필요 없으면 건너뛰세요.</p>
+
+        <div class="helper">
+            <strong>봇 만드는 법</strong>
+            <ol>
+                <li><a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather 열기</a> → <code>/newbot</code> 입력</li>
+                <li>봇 이름 → 사용자명(<code>...bot</code>으로 끝나야 함)</li>
+                <li>받은 토큰을 "봇 토큰"에 붙여넣기</li>
+                <li>봇한테 아무 메시지나 보낸 후 <strong>테스트</strong> 버튼 클릭 → 자동으로 Chat ID 가져옴</li>
+            </ol>
+        </div>
+
+        <div class="field">
+            <label for="tg-bot">봇 토큰</label>
+            <input type="text" id="tg-bot" placeholder="1234567890:ABCdef...">
+        </div>
+        <div class="field">
+            <label for="tg-chat">Chat ID</label>
+            <input type="text" id="tg-chat" placeholder="123456789 (자동 입력 가능)">
+        </div>
+
+        <div class="msg" id="tg-msg"></div>
+
+        <div class="actions">
+            <div class="left">
+                <button class="btn ghost" data-prev>← 뒤로</button>
+                <button class="btn subtle" id="test-tg-btn">테스트</button>
+            </div>
+            <div class="right">
+                <button class="skip" data-next>건너뛰기</button>
+                <button class="btn" data-next>다음 →</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── 5. 권한 ─── -->
+    <div class="step" data-step="perms">
+        <div class="eyebrow">4단계 · macOS 권한</div>
+        <h1>두 가지 권한이 필요해요</h1>
+        <p class="lead">화면 캡처와 마우스/키보드 제어를 위해 macOS 권한이 필요해요. 아래 버튼으로 시스템 설정을 바로 열 수 있어요.</p>
+
+        <div id="perm-list">
+            <div class="perm warn" id="perm-screen">
+                <div class="perm-icon">🖼</div>
+                <div class="perm-body">
+                    <div class="perm-title">화면 기록</div>
+                    <div class="perm-sub">원격 화면 캡처용</div>
+                </div>
+                <button class="btn subtle" data-which="screen">설정 열기</button>
+            </div>
+
+            <div class="perm warn" id="perm-acc">
+                <div class="perm-icon">🖱</div>
+                <div class="perm-body">
+                    <div class="perm-title">손쉬운 사용</div>
+                    <div class="perm-sub">마우스/키보드 제어용</div>
+                </div>
+                <button class="btn subtle" data-which="accessibility">설정 열기</button>
+            </div>
+        </div>
+
+        <p class="meter-text" style="margin-top:12px">
+            💡 권한 변경 후엔 서버를 한 번 종료했다가 다시 켜야 적용돼요.
+        </p>
+
+        <div class="actions">
+            <div class="left">
+                <button class="btn ghost" data-prev>← 뒤로</button>
+            </div>
+            <div class="right">
+                <button class="btn" data-next>다음 →</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── 6. 완료 ─── -->
+    <div class="step" data-step="done">
+        <div class="done-card">
+            <div class="glyph">✓</div>
+            <h1>준비 완료!</h1>
+            <p class="lead">설정이 저장됐어요. 잠시 후 로그인 화면으로 이동합니다.</p>
+            <div class="msg" id="save-msg"></div>
+            <button class="btn lg" id="finish-btn" style="margin-top:12px">로그인 화면으로 →</button>
+        </div>
+    </div>
+
+    </div>
+</div>
+
+<div class="footnote">처음 한 번만 표시되는 화면이에요 · 나중에 ⚙️ 설정에서 다시 바꿀 수 있어요</div>
+
+<script>
+(function() {
+"use strict";
+const $ = id => document.getElementById(id);
+const ALL_STEPS = ["welcome","password","ngrok","telegram","perms","done"];
+let STEPS = ALL_STEPS.slice();
+let currentIdx = 0;
+
+// ─── 단계 표시 만들기 ───
+const stepsEl = $("steps");
+function rebuildStepDots() {
+    stepsEl.innerHTML = "";
+    STEPS.forEach(() => {
+        const d = document.createElement("div");
+        d.className = "dot";
+        stepsEl.appendChild(d);
+    });
+}
+
+function updateStepUI() {
+    document.querySelectorAll(".steps .dot").forEach((d, i) => {
+        d.classList.toggle("done", i < currentIdx);
+        d.classList.toggle("current", i === currentIdx);
+    });
+    $("progress-fill").style.width = (currentIdx / Math.max(1, STEPS.length - 1) * 100) + "%";
+    document.querySelectorAll(".step").forEach(s => s.classList.remove("active"));
+    const cur = document.querySelector(`.step[data-step="${STEPS[currentIdx]}"]`);
+    if (cur) cur.classList.add("active");
+    // autofocus 첫 입력 또는 첫 버튼
+    setTimeout(() => {
+        if (!cur) return;
+        const inp = cur.querySelector("input");
+        if (inp) { inp.focus(); return; }
+        const btn = cur.querySelector("[data-next]");
+        if (btn) btn.focus();
+    }, 50);
+}
+
+async function goNext() {
+    // 비밀번호 단계 검증
+    if (STEPS[currentIdx] === "password") {
+        const pw = $("pw").value, pw2 = $("pw2").value;
+        if (!pw) { showMsg("pw-msg", "err", "비밀번호를 입력하세요"); return; }
+        if (pw.length < 4) { showMsg("pw-msg", "err", "4자 이상 입력하세요"); return; }
+        if (pw !== pw2) { showMsg("pw-msg", "err", "두 비밀번호가 일치하지 않아요"); return; }
+        clearMsg("pw-msg");
+    }
+    // 마지막 직전 단계(perms) 다음 → 저장
+    if (STEPS[currentIdx + 1] === "done") {
+        await save();
+    }
+    if (currentIdx < STEPS.length - 1) {
+        currentIdx++;
+        updateStepUI();
+    }
+}
+function goPrev() {
+    if (currentIdx > 0) {
+        currentIdx--;
+        updateStepUI();
+    }
+}
+
+document.querySelectorAll("[data-next]").forEach(b => b.addEventListener("click", goNext));
+document.querySelectorAll("[data-prev]").forEach(b => b.addEventListener("click", goPrev));
+
+// 키보드: Enter=다음, ESC=뒤로
+document.addEventListener("keydown", e => {
+    if (e.target.tagName === "INPUT" && e.key !== "Enter" && e.key !== "Escape") return;
+    if (e.key === "Enter") { e.preventDefault(); goNext(); }
+    else if (e.key === "Escape") { e.preventDefault(); goPrev(); }
+});
+
+// ─── 비밀번호 강도 ───
+function strength(pw) {
+    if (!pw) return { score: 0, label: "" };
+    let s = 0;
+    if (pw.length >= 8) s++;
+    if (pw.length >= 12) s++;
+    if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) s++;
+    if (/[0-9]/.test(pw)) s++;
+    if (/[^a-zA-Z0-9]/.test(pw)) s++;
+    const labels = ["매우 약함", "약함", "보통", "좋음", "강함", "매우 강함"];
+    const colors = ["#ef5552","#ef5552","#e5a23a","#e5c43a","#7fcc4f","#3fc55c"];
+    return { score: s, label: labels[s], color: colors[s] };
+}
+$("pw").addEventListener("input", function() {
+    const s = strength(this.value);
+    $("meter-fill").style.width = (s.score * 20) + "%";
+    $("meter-fill").style.background = s.color || "#ef5552";
+    $("meter-text").textContent = this.value ? "강도: " + s.label : "";
+});
+
+// ─── API ───
+async function api(method, path, body) {
+    const opts = { method, headers: {} };
+    if (body) {
+        opts.headers["Content-Type"] = "application/json";
+        opts.body = JSON.stringify(body);
+    }
+    const res = await fetch(path, opts);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || "요청 실패");
+    return data;
+}
+
+function showMsg(id, type, text, withSpinner) {
+    const el = $(id);
+    el.className = "msg " + type;
+    el.innerHTML = (withSpinner ? '<span class="spin"></span>' : '') + escapeHtml(text);
+}
+function clearMsg(id) {
+    const el = $(id);
+    el.className = "msg";
+    el.innerHTML = "";
+}
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+// ─── ngrok 테스트 ───
+$("test-ngrok-btn").addEventListener("click", async function() {
+    const t = $("ngrok").value.trim();
+    if (!t) { showMsg("ngrok-msg", "err", "토큰을 먼저 입력해주세요"); return; }
+    this.disabled = true;
+    showMsg("ngrok-msg", "info", " 터널을 잠깐 열어보는 중... (5~10초)", true);
+    try {
+        const r = await api("POST", "/api/test-ngrok", { token: t });
+        if (r.ok) showMsg("ngrok-msg", "ok", "✓ 작동해요! 외부 URL: " + r.message);
+        else showMsg("ngrok-msg", "err", "✗ 실패: " + r.message);
+    } catch (e) {
+        showMsg("ngrok-msg", "err", "✗ " + e.message);
+    } finally { this.disabled = false; }
+});
+
+// ─── 텔레그램: 자동 Chat ID + 테스트 ───
+async function autoFetchChatId(botToken) {
+    try {
+        const r = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates`);
+        const d = await r.json();
+        if (d.ok && d.result.length) {
+            // 가장 최근 메시지의 chat.id
+            for (let i = d.result.length - 1; i >= 0; i--) {
+                const m = d.result[i].message || d.result[i].edited_message;
+                if (m && m.chat && m.chat.id) return String(m.chat.id);
+            }
+        }
+    } catch (e) {}
+    return null;
+}
+
+$("test-tg-btn").addEventListener("click", async function() {
+    const bt = $("tg-bot").value.trim();
+    let ci = $("tg-chat").value.trim();
+    if (!bt) { showMsg("tg-msg", "err", "봇 토큰을 입력해주세요"); return; }
+    this.disabled = true;
+    if (!ci) {
+        showMsg("tg-msg", "info", " Chat ID 자동 탐색 중...", true);
+        ci = await autoFetchChatId(bt);
+        if (ci) {
+            $("tg-chat").value = ci;
+        } else {
+            showMsg("tg-msg", "err", "✗ Chat ID를 자동으로 찾지 못했어요. 봇한테 메시지를 한 번 보낸 후 다시 시도해보세요");
+            this.disabled = false; return;
+        }
+    }
+    showMsg("tg-msg", "info", " 테스트 메시지 전송 중...", true);
+    try {
+        const r = await api("POST", "/api/test-telegram", { bot_token: bt, chat_id: ci });
+        if (r.ok) showMsg("tg-msg", "ok", "✓ 텔레그램으로 보냈어요! 확인해보세요");
+        else showMsg("tg-msg", "err", "✗ " + r.message);
+    } catch (e) {
+        showMsg("tg-msg", "err", "✗ " + e.message);
+    } finally { this.disabled = false; }
+});
+
+// ─── 권한 ───
+let permPolling = null;
+let isDarwin = true;  // 초기 추정, 첫 status 호출에서 확정
+async function loadPermissions() {
+    try {
+        const status = await api("GET", "/api/status");
+        if (status.platform !== "Darwin") {
+            isDarwin = false;
+            // 비-macOS면 권한 단계 제거 (한 번만)
+            if (STEPS.includes("perms")) {
+                STEPS = STEPS.filter(s => s !== "perms");
+                rebuildStepDots();
+                updateStepUI();
+            }
+            if (permPolling) { clearInterval(permPolling); permPolling = null; }
+            return;
+        }
+        const r = await api("GET", "/api/permissions");
+        const map = [
+            { id: "perm-screen", ok: r.screen_recording },
+            { id: "perm-acc", ok: r.accessibility },
+        ];
+        map.forEach(({ id, ok }) => {
+            const el = $(id);
+            if (!el) return;
+            el.classList.toggle("ok", ok);
+            el.classList.toggle("warn", !ok);
+            el.querySelector(".perm-icon").textContent = ok ? "✓" : (id === "perm-screen" ? "🖼" : "🖱");
+        });
+    } catch (e) {}
+}
+document.querySelectorAll("[data-which]").forEach(btn => {
+    btn.addEventListener("click", async function() {
+        try {
+            await api("POST", "/api/open-settings", { which: this.dataset.which });
+            setTimeout(loadPermissions, 1500);
+        } catch (e) {}
+    });
+});
+
+// ─── 저장 ───
+async function save() {
+    showMsg("save-msg", "info", " 저장 중...", true);
+    try {
+        await api("POST", "/api/config", {
+            password: $("pw").value,
+            ngrok_authtoken: $("ngrok").value.trim(),
+            telegram_bot_token: $("tg-bot").value.trim(),
+            telegram_chat_id: $("tg-chat").value.trim(),
+        });
+        clearMsg("save-msg");
+    } catch (e) {
+        showMsg("save-msg", "err", "✗ " + e.message);
+    }
+}
+
+$("finish-btn").addEventListener("click", () => {
+    window.location.href = "/static/index.html";
+});
+
+// 초기화
+rebuildStepDots();
+updateStepUI();
+loadPermissions();
+permPolling = setInterval(loadPermissions, 4000);
+
+})();
+</script>
+</body>
+</html>

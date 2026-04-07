@@ -1,0 +1,1634 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Remote Desktop</title>
+<!-- PWA: 홈 화면에 추가하면 전체화면 앱처럼 동작 -->
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#1a1a2e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Remote">
+<meta name="mobile-web-app-capable" content="yes">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    background:#1a1a2e;color:#e0e0e0;
+    overflow:hidden;height:100vh;
+    overscroll-behavior:none;
+    /* iPhone 노치/홈바 대응 */
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* 로그인 */
+#login-screen{
+    display:flex;justify-content:center;align-items:center;height:100vh;
+    background:linear-gradient(135deg,#1a1a2e,#16213e 50%,#0f3460);
+}
+.login-box{
+    background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+    border-radius:16px;padding:40px;width:360px;max-width:90vw;
+    backdrop-filter:blur(10px);
+}
+.login-box h1{text-align:center;margin-bottom:8px;font-size:24px;color:#fff}
+.login-box p{text-align:center;margin-bottom:24px;color:#888;font-size:14px}
+.login-box input{
+    width:100%;padding:12px 16px;border:1px solid rgba(255,255,255,.15);
+    border-radius:8px;background:rgba(255,255,255,.08);color:#fff;
+    font-size:16px;outline:none;margin-bottom:16px;
+}
+.login-box input:focus{border-color:#4a9eff}
+.login-box button{
+    width:100%;padding:12px;border:none;border-radius:8px;
+    background:#4a9eff;color:#fff;font-size:16px;cursor:pointer;font-weight:600;
+}
+.login-box button:hover{background:#3a8eef}
+.login-box button:disabled{background:#555;cursor:not-allowed}
+#login-error{color:#ff6b6b;text-align:center;margin-top:12px;font-size:14px;min-height:20px}
+
+/* 데스크탑 */
+#desktop-screen{display:none;height:100vh;flex-direction:column}
+#toolbar{
+    display:flex;align-items:center;gap:10px;padding:6px 12px;
+    background:#16213e;border-bottom:1px solid rgba(255,255,255,.1);
+    flex-shrink:0;flex-wrap:wrap;
+}
+.tg{display:flex;align-items:center;gap:5px;font-size:13px}
+.tg label{color:#888;white-space:nowrap}
+.tg input[type=range]{width:80px;cursor:pointer}
+.tg select{
+    padding:4px 6px;border-radius:4px;border:1px solid rgba(255,255,255,.15);
+    background:rgba(255,255,255,.08);color:#e0e0e0;font-size:13px;
+}
+#status-dot{width:10px;height:10px;border-radius:50%;background:#4caf50;flex-shrink:0}
+#status-dot.err{background:#ff5252}
+#status-dot.load{background:#ffc107}
+#status-text{font-size:13px;color:#888}
+.tbtn{
+    padding:4px 10px;border:1px solid rgba(255,255,255,.15);border-radius:4px;
+    background:rgba(255,255,255,.08);color:#e0e0e0;cursor:pointer;
+    font-size:13px;white-space:nowrap;
+}
+.tbtn:hover{background:rgba(255,255,255,.15)}
+.tbtn.on{background:#4a9eff;border-color:#4a9eff}
+
+#viewer{
+    flex:1;overflow:hidden;display:flex;justify-content:center;
+    align-items:flex-start;background:#111;position:relative;touch-action:none;
+}
+/* 키보드 모드일 때 viewer 하단에 입력 바 높이만큼 패딩 */
+#desktop-screen.kb-on #viewer{padding-bottom:60px}
+#screen-img{
+    max-width:100%;height:auto;cursor:crosshair;display:block;
+    user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+    transform-origin:0 0;
+    will-change:transform;
+}
+/* 줌 인디케이터 */
+#zoom-indicator{
+    position:fixed;top:50px;right:12px;
+    background:rgba(74,158,255,.9);color:#fff;
+    padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;
+    display:none;z-index:101;pointer-events:none;
+}
+#zoom-indicator.on{display:block}
+/* 입력 바 (키보드 모드일 때 화면 하단에 표시) */
+#input-bar{
+    position:fixed;bottom:0;left:0;right:0;
+    background:#16213e;border-top:1px solid rgba(74,158,255,.5);
+    padding:8px;display:none;z-index:100;
+    box-shadow:0 -4px 12px rgba(0,0,0,.3);
+}
+#input-bar.on{display:flex;gap:8px;align-items:center}
+#text-input{
+    flex:1;padding:10px 14px;border:1px solid rgba(255,255,255,.15);
+    border-radius:8px;background:rgba(255,255,255,.08);color:#fff;
+    font-size:16px;outline:none;
+}
+#text-input:focus{border-color:#4a9eff}
+#send-btn{
+    padding:10px 16px;border:none;border-radius:8px;
+    background:#4a9eff;color:#fff;font-size:14px;font-weight:600;cursor:pointer;
+}
+#send-btn:disabled{background:#555}
+.kb-key{
+    padding:10px 12px;border:1px solid rgba(255,255,255,.15);border-radius:6px;
+    background:rgba(255,255,255,.08);color:#e0e0e0;font-size:13px;cursor:pointer;
+    white-space:nowrap;flex-shrink:0;
+}
+.kb-key:active{background:#4a9eff}
+
+/* 퀵 키 패드 (Enter, ESC, 화살표 등) */
+#quick-keys{
+    position:fixed;right:12px;bottom:80px;z-index:99;
+    display:none;flex-direction:column;gap:6px;
+}
+#quick-keys.on{display:flex}
+.qk{
+    width:48px;height:48px;border-radius:50%;border:none;
+    background:rgba(74,158,255,.85);color:#fff;font-size:14px;font-weight:600;
+    cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.4);
+    display:flex;align-items:center;justify-content:center;
+    -webkit-touch-callout:none;-webkit-user-select:none;user-select:none;
+}
+.qk:active{background:#4a9eff;transform:scale(.9)}
+.qk-arrows{
+    display:grid;grid-template-columns:repeat(3,40px);grid-template-rows:repeat(3,40px);
+    gap:4px;background:rgba(22,33,62,.9);padding:6px;border-radius:12px;
+    box-shadow:0 4px 12px rgba(0,0,0,.4);
+}
+.qk-arrows .qk{width:40px;height:40px;font-size:16px}
+.qk-arrows .qk-empty{visibility:hidden}
+
+/* 단축키 패드 (Cmd+C, Cmd+V 등) */
+#shortcut-keys{
+    position:fixed;left:12px;bottom:80px;z-index:99;
+    display:none;flex-direction:column;gap:6px;
+    background:rgba(22,33,62,.9);padding:8px;border-radius:12px;
+    box-shadow:0 4px 12px rgba(0,0,0,.4);
+}
+#shortcut-keys.on{display:flex}
+.sk{
+    padding:8px 12px;border:none;border-radius:6px;
+    background:rgba(74,158,255,.85);color:#fff;
+    font-size:12px;font-weight:600;cursor:pointer;
+    min-width:100px;text-align:left;
+    -webkit-touch-callout:none;-webkit-user-select:none;user-select:none;
+}
+.sk:active{background:#4a9eff;transform:scale(.95)}
+.click-ring{
+    position:absolute;width:20px;height:20px;border:2px solid #4a9eff;
+    border-radius:50%;pointer-events:none;
+    animation:pulse .4s ease-out forwards;
+}
+@keyframes pulse{
+    0%{transform:translate(-50%,-50%) scale(.5);opacity:1}
+    100%{transform:translate(-50%,-50%) scale(2);opacity:0}
+}
+#drag-box{
+    position:absolute;border:2px dashed #4a9eff;background:rgba(74,158,255,.1);
+    pointer-events:none;display:none;
+}
+
+@media(max-width:640px){
+    #toolbar{gap:6px;padding:4px 8px}
+    .tg{gap:3px;font-size:12px}
+    .tg input[type=range]{width:50px}
+    .tbtn{padding:4px 8px;font-size:12px}
+    .hide-mobile{display:none}
+}
+
+/* ─── 설정 모달 (사이드바 탭 레이아웃) ─── */
+#settings-overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.6);
+    display:none;justify-content:center;align-items:center;
+    z-index:200;padding:24px 16px;
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    animation:overlayIn .2s ease-out;
+}
+@keyframes overlayIn{from{opacity:0}to{opacity:1}}
+#settings-overlay.on{display:flex}
+
+.settings-modal{
+    display:flex;
+    width:780px;max-width:100%;height:560px;max-height:90vh;
+    background:#0f1420;
+    border:1px solid rgba(255,255,255,.1);
+    border-radius:14px;
+    box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.04);
+    overflow:hidden;
+    animation:modalIn .25s cubic-bezier(.4,0,.2,1);
+}
+@keyframes modalIn{
+    from{opacity:0;transform:scale(.96) translateY(8px)}
+    to{opacity:1;transform:scale(1) translateY(0)}
+}
+
+.sm-side{
+    width:200px;flex-shrink:0;
+    background:rgba(255,255,255,.02);
+    border-right:1px solid rgba(255,255,255,.06);
+    display:flex;flex-direction:column;
+    padding:18px 12px;
+}
+.sm-side-title{
+    font-size:11px;font-weight:700;color:#5d6675;
+    text-transform:uppercase;letter-spacing:.1em;
+    padding:0 10px 12px;
+}
+.sm-tab{
+    display:flex;align-items:center;gap:10px;
+    padding:9px 12px;border-radius:7px;
+    color:#9aa3b2;font-size:13px;font-weight:500;
+    cursor:pointer;border:none;background:none;
+    width:100%;text-align:left;font-family:inherit;
+    transition:all .15s;
+    margin-bottom:2px;
+}
+.sm-tab:hover{background:rgba(255,255,255,.04);color:#e0e8f5}
+.sm-tab.active{background:rgba(79,140,255,.15);color:#a8c5ff}
+.sm-tab .icon{font-size:15px;width:18px;text-align:center}
+
+.sm-main{
+    flex:1;display:flex;flex-direction:column;
+    min-width:0;
+}
+.sm-header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:18px 24px 14px;
+    border-bottom:1px solid rgba(255,255,255,.06);
+}
+.sm-header h2{
+    font-size:17px;font-weight:600;color:#f0f3f8;
+    margin:0;letter-spacing:-.01em;
+}
+.sm-header .close-x{
+    width:28px;height:28px;border-radius:6px;
+    background:none;border:none;color:#9aa3b2;
+    font-size:20px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    transition:all .15s;
+}
+.sm-header .close-x:hover{background:rgba(255,255,255,.08);color:#fff}
+
+.sm-body{
+    flex:1;overflow-y:auto;
+    padding:22px 24px;
+}
+.sm-body::-webkit-scrollbar{width:8px}
+.sm-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:4px}
+.sm-body::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.2)}
+
+.sm-pane{display:none}
+.sm-pane.active{display:block;animation:paneIn .2s ease-out}
+@keyframes paneIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+
+.sm-section-title{
+    font-size:13px;font-weight:600;color:#f0f3f8;
+    margin:0 0 4px;
+}
+.sm-section-desc{
+    font-size:12px;color:#9aa3b2;line-height:1.55;
+    margin:0 0 14px;
+}
+
+.sm-field{margin-bottom:14px}
+.sm-field label{
+    display:block;font-size:11px;font-weight:500;
+    color:#9aa3b2;margin-bottom:6px;
+    text-transform:uppercase;letter-spacing:.05em;
+}
+.sm-field input[type=text],
+.sm-field input[type=password],
+.sm-field input[type=number]{
+    width:100%;padding:9px 12px;
+    background:rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.1);
+    border-radius:7px;
+    color:#f0f3f8;font-size:13px;font-family:inherit;
+    outline:none;transition:all .15s;
+}
+.sm-field input:hover{background:rgba(255,255,255,.06)}
+.sm-field input:focus{
+    border-color:#4f8cff;
+    background:rgba(255,255,255,.06);
+    box-shadow:0 0 0 3px rgba(79,140,255,.15);
+}
+.sm-field input::placeholder{color:#5d6675}
+.sm-field-row{display:flex;gap:10px}
+.sm-field-row > *{flex:1}
+
+.sm-btn{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:8px 14px;border-radius:7px;
+    background:#4f8cff;color:#fff;
+    font-size:12px;font-weight:600;font-family:inherit;
+    border:none;cursor:pointer;
+    transition:all .15s;
+}
+.sm-btn:hover{background:#6ba0ff}
+.sm-btn:active{transform:scale(.97)}
+.sm-btn:disabled{background:#374151;cursor:not-allowed;opacity:.6}
+.sm-btn.ghost{
+    background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.1);
+    color:#e0e8f5;
+}
+.sm-btn.ghost:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.16)}
+
+.sm-link{color:#6ba0ff;font-size:12px;text-decoration:none}
+.sm-link:hover{text-decoration:underline}
+
+.sm-msg{
+    padding:8px 12px;border-radius:6px;font-size:12px;
+    margin-top:8px;display:none;align-items:center;gap:8px;
+}
+.sm-msg.ok{display:flex;background:rgba(63,197,92,.12);border:1px solid rgba(63,197,92,.3);color:#7ed896}
+.sm-msg.err{display:flex;background:rgba(239,85,82,.12);border:1px solid rgba(239,85,82,.3);color:#ff8a87}
+.sm-msg.info{display:flex;background:rgba(79,140,255,.12);border:1px solid rgba(79,140,255,.3);color:#a8c5ff}
+
+.sm-divider{
+    height:1px;background:rgba(255,255,255,.06);
+    margin:18px 0;
+}
+
+/* 토글 스위치 */
+.sm-toggle-row{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:10px 0;
+}
+.sm-toggle-label{
+    flex:1;
+}
+.sm-toggle-label .t{font-size:13px;color:#f0f3f8;font-weight:500}
+.sm-toggle-label .d{font-size:11px;color:#9aa3b2;margin-top:2px}
+
+.sm-switch{
+    position:relative;width:36px;height:20px;
+    background:rgba(255,255,255,.1);
+    border-radius:10px;cursor:pointer;
+    transition:background .2s;flex-shrink:0;
+}
+.sm-switch.on{background:#4f8cff}
+.sm-switch::after{
+    content:"";position:absolute;top:2px;left:2px;
+    width:16px;height:16px;border-radius:50%;
+    background:#fff;transition:transform .2s;
+    box-shadow:0 1px 3px rgba(0,0,0,.2);
+}
+.sm-switch.on::after{transform:translateX(16px)}
+
+/* 권한 카드 */
+.sm-perm{
+    display:flex;align-items:center;gap:12px;
+    padding:12px 14px;
+    background:rgba(229,162,58,.08);
+    border:1px solid rgba(229,162,58,.3);
+    border-radius:9px;margin-bottom:8px;
+}
+.sm-perm.ok{
+    background:rgba(63,197,92,.08);
+    border-color:rgba(63,197,92,.3);
+}
+.sm-perm-icon{
+    width:32px;height:32px;border-radius:8px;
+    background:rgba(255,255,255,.06);
+    display:flex;align-items:center;justify-content:center;
+    font-size:15px;flex-shrink:0;
+}
+.sm-perm.ok .sm-perm-icon{background:rgba(63,197,92,.18)}
+.sm-perm-body{flex:1;min-width:0}
+.sm-perm-title{font-size:13px;font-weight:600;color:#f0f3f8}
+.sm-perm-sub{font-size:11px;color:#9aa3b2;margin-top:1px}
+
+/* 상태 인디케이터 */
+.sm-status-card{
+    background:rgba(255,255,255,.03);
+    border:1px solid rgba(255,255,255,.06);
+    border-radius:9px;padding:14px;margin-bottom:14px;
+}
+.sm-status-row{
+    display:flex;align-items:center;gap:8px;
+    font-size:12px;color:#9aa3b2;
+}
+.sm-status-row + .sm-status-row{margin-top:6px}
+.sm-status-row .dot{
+    width:8px;height:8px;border-radius:50%;
+    background:#9aa3b2;flex-shrink:0;
+}
+.sm-status-row .dot.on{background:#3fc55c;box-shadow:0 0 6px rgba(63,197,92,.6)}
+.sm-status-row .url{
+    color:#a8c5ff;font-family:"SF Mono",ui-monospace,monospace;
+    font-size:11px;word-break:break-all;
+}
+
+.sm-footer{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:14px 24px;
+    border-top:1px solid rgba(255,255,255,.06);
+    background:rgba(255,255,255,.02);
+}
+.sm-footer .save-status{font-size:12px;color:#9aa3b2}
+.sm-footer .save-status.ok{color:#7ed896}
+.sm-footer .save-status.err{color:#ff8a87}
+.sm-footer-actions{display:flex;gap:8px}
+
+.sm-spin{
+    width:12px;height:12px;border-radius:50%;
+    border:2px solid currentColor;border-right-color:transparent;
+    animation:smspin .7s linear infinite;display:inline-block;
+}
+@keyframes smspin{to{transform:rotate(360deg)}}
+
+@media(max-width:680px){
+    .settings-modal{flex-direction:column;height:100vh;max-height:100vh;border-radius:0}
+    .sm-side{
+        width:100%;flex-direction:row;
+        border-right:none;border-bottom:1px solid rgba(255,255,255,.06);
+        padding:8px;overflow-x:auto;
+    }
+    .sm-side-title{display:none}
+    .sm-tab{flex-shrink:0;width:auto;margin-bottom:0;margin-right:4px}
+}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+    <div class="login-box">
+        <h1>Remote Desktop</h1>
+        <p>macOS 원격 데스크탑에 접속합니다</p>
+        <input type="password" id="pw" placeholder="비밀번호를 입력하세요" autofocus>
+        <button id="login-btn">로그인</button>
+        <div id="login-error"></div>
+    </div>
+</div>
+
+<div id="desktop-screen">
+    <div id="toolbar">
+        <div class="tg">
+            <span id="status-dot"></span>
+            <span id="status-text">연결됨</span>
+        </div>
+        <div class="tg hide-mobile">
+            <label>갱신:</label>
+            <input type="range" id="sl-refresh" min="200" max="5000" value="1000" step="100">
+            <span id="val-refresh">1.0s</span>
+        </div>
+        <div class="tg hide-mobile">
+            <label>화질:</label>
+            <input type="range" id="sl-quality" min="10" max="100" value="50" step="5">
+            <span id="val-quality">50</span>
+        </div>
+        <div class="tg">
+            <label>해상도:</label>
+            <select id="sel-scale">
+                <option value="0.25">25%</option>
+                <option value="0.5" selected>50%</option>
+                <option value="0.75">75%</option>
+                <option value="1.0">100%</option>
+            </select>
+        </div>
+        <div class="tg">
+            <button class="tbtn" id="btn-kb">키보드</button>
+            <button class="tbtn" id="btn-drag">드래그</button>
+            <button class="tbtn" id="btn-rclick">우클릭</button>
+            <button class="tbtn" id="btn-qk">퀵키</button>
+            <button class="tbtn" id="btn-sk">단축키</button>
+            <button class="tbtn" id="btn-fs">전체화면</button>
+            <button class="tbtn" id="btn-settings" title="설정">⚙️</button>
+        </div>
+        <div class="tg hide-mobile"><span id="res-text"></span></div>
+    </div>
+    <div id="viewer">
+        <img id="screen-img" alt="원격 화면">
+        <div id="drag-box"></div>
+    </div>
+    <!-- 입력 바: 키보드 모드일 때 하단에 표시 -->
+    <div id="input-bar">
+        <button class="kb-key" id="kb-tab" title="Tab">Tab</button>
+        <input type="text" id="text-input" placeholder="입력 후 전송 또는 Enter" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <button class="kb-key" id="kb-back" title="Backspace">⌫</button>
+        <button id="send-btn">전송</button>
+    </div>
+
+    <!-- 퀵 키 패드: 다이얼로그 응답, 화살표 이동 등 자주 쓰는 키 -->
+    <div id="quick-keys">
+        <button class="qk" data-key="enter" title="Enter (확인/OK)">⏎</button>
+        <button class="qk" data-key="escape" title="ESC (취소)">Esc</button>
+        <div class="qk-arrows">
+            <span class="qk qk-empty"></span>
+            <button class="qk" data-key="up">↑</button>
+            <span class="qk qk-empty"></span>
+            <button class="qk" data-key="left">←</button>
+            <button class="qk" data-key="space" title="Space">␣</button>
+            <button class="qk" data-key="right">→</button>
+            <span class="qk qk-empty"></span>
+            <button class="qk" data-key="down">↓</button>
+            <span class="qk qk-empty"></span>
+        </div>
+    </div>
+
+    <!-- 단축키 패드: macOS 자주 쓰는 키 조합 -->
+    <div id="shortcut-keys">
+        <button class="sk" data-key="c" data-mod="command">⌘C 복사</button>
+        <button class="sk" data-key="v" data-mod="command">⌘V 붙여넣기</button>
+        <button class="sk" data-key="x" data-mod="command">⌘X 잘라내기</button>
+        <button class="sk" data-key="z" data-mod="command">⌘Z 실행취소</button>
+        <button class="sk" data-key="a" data-mod="command">⌘A 전체선택</button>
+        <button class="sk" data-key="s" data-mod="command">⌘S 저장</button>
+        <button class="sk" data-key="f" data-mod="command">⌘F 찾기</button>
+        <button class="sk" data-key="tab" data-mod="command">⌘Tab 앱전환</button>
+        <button class="sk" data-key="space" data-mod="command">⌘Space Spotlight</button>
+        <button class="sk" data-key="`" data-mod="command">⌘` 윈도우전환</button>
+    </div>
+
+    <!-- 줌 인디케이터 -->
+    <div id="zoom-indicator">100%</div>
+</div>
+
+<!-- ─── 설정 모달 (사이드바 탭 레이아웃) ─── -->
+<div id="settings-overlay">
+    <div class="settings-modal">
+        <!-- 사이드바 -->
+        <nav class="sm-side">
+            <div class="sm-side-title">설정</div>
+            <button class="sm-tab active" data-pane="account">
+                <span class="icon">🔐</span> 계정
+            </button>
+            <button class="sm-tab" data-pane="network">
+                <span class="icon">🌐</span> 외부 접속
+            </button>
+            <button class="sm-tab" data-pane="notify">
+                <span class="icon">📨</span> 알림
+            </button>
+            <button class="sm-tab" data-pane="system" id="sm-tab-system">
+                <span class="icon">🔒</span> 권한
+            </button>
+            <button class="sm-tab" data-pane="advanced">
+                <span class="icon">⚙️</span> 고급
+            </button>
+        </nav>
+
+        <!-- 메인 -->
+        <div class="sm-main">
+            <header class="sm-header">
+                <h2 id="sm-title">계정</h2>
+                <button class="close-x" id="settings-close">×</button>
+            </header>
+
+            <div class="sm-body">
+                <!-- 계정 -->
+                <div class="sm-pane active" data-pane="account">
+                    <h3 class="sm-section-title">비밀번호 변경</h3>
+                    <p class="sm-section-desc">변경하지 않으려면 비워두세요. 새 비밀번호는 다음 로그인부터 적용됩니다.</p>
+                    <div class="sm-field">
+                        <label>새 비밀번호</label>
+                        <input type="password" id="set-pw" placeholder="4자 이상" autocomplete="new-password">
+                    </div>
+                    <div class="sm-field">
+                        <label>새 비밀번호 확인</label>
+                        <input type="password" id="set-pw2" autocomplete="new-password">
+                    </div>
+                </div>
+
+                <!-- 네트워크 -->
+                <div class="sm-pane" data-pane="network">
+                    <h3 class="sm-section-title">ngrok 외부 접속</h3>
+                    <p class="sm-section-desc">집 밖에서도 이 서버에 접속하려면 ngrok 토큰이 필요해요. 끄려면 토큰을 비워두세요.</p>
+
+                    <div class="sm-status-card" id="sm-ngrok-status">
+                        <div class="sm-status-row">
+                            <span class="dot" id="sm-ngrok-dot"></span>
+                            <span id="sm-ngrok-state">상태 확인 중...</span>
+                        </div>
+                        <div class="sm-status-row" id="sm-ngrok-url-row" style="display:none">
+                            <span class="url" id="sm-ngrok-url"></span>
+                        </div>
+                    </div>
+
+                    <a class="sm-link" href="https://dashboard.ngrok.com/get-started/your-authtoken" target="_blank" rel="noopener">↗ ngrok에서 토큰 받기</a>
+                    <div class="sm-field" style="margin-top:10px">
+                        <label>Authtoken</label>
+                        <input type="text" id="set-ngrok" placeholder="비워두면 로컬 전용">
+                    </div>
+                    <button class="sm-btn ghost" id="set-test-ngrok">토큰 테스트</button>
+                    <div class="sm-msg" id="set-ngrok-msg"></div>
+                </div>
+
+                <!-- 알림 -->
+                <div class="sm-pane" data-pane="notify">
+                    <h3 class="sm-section-title">텔레그램 알림</h3>
+                    <p class="sm-section-desc">서버 시작/종료 및 외부 URL 변경을 텔레그램으로 받아보세요.</p>
+
+                    <a class="sm-link" href="https://t.me/BotFather" target="_blank" rel="noopener">↗ @BotFather에서 봇 만들기</a>
+                    <div class="sm-field" style="margin-top:10px">
+                        <label>봇 토큰</label>
+                        <input type="text" id="set-tg-bot" placeholder="1234567890:ABCdef...">
+                    </div>
+                    <div class="sm-field">
+                        <label>Chat ID</label>
+                        <input type="text" id="set-tg-chat" placeholder="123456789 (자동 입력 가능)">
+                    </div>
+                    <button class="sm-btn ghost" id="set-test-tg">테스트 메시지 보내기</button>
+                    <div class="sm-msg" id="set-tg-msg"></div>
+                </div>
+
+                <!-- 권한 (macOS) -->
+                <div class="sm-pane" data-pane="system">
+                    <h3 class="sm-section-title">macOS 권한</h3>
+                    <p class="sm-section-desc">화면 캡처와 마우스/키보드 제어를 위해 두 권한이 필요해요. 변경 후엔 서버를 한 번 재시작해야 해요.</p>
+
+                    <div class="sm-perm" id="set-perm-screen">
+                        <div class="sm-perm-icon">🖼</div>
+                        <div class="sm-perm-body">
+                            <div class="sm-perm-title">화면 기록</div>
+                            <div class="sm-perm-sub">원격 화면 캡처용</div>
+                        </div>
+                        <button class="sm-btn ghost" data-which="screen">설정 열기</button>
+                    </div>
+
+                    <div class="sm-perm" id="set-perm-acc">
+                        <div class="sm-perm-icon">🖱</div>
+                        <div class="sm-perm-body">
+                            <div class="sm-perm-title">손쉬운 사용</div>
+                            <div class="sm-perm-sub">마우스/키보드 제어용</div>
+                        </div>
+                        <button class="sm-btn ghost" data-which="accessibility">설정 열기</button>
+                    </div>
+                </div>
+
+                <!-- 고급 -->
+                <div class="sm-pane" data-pane="advanced">
+                    <h3 class="sm-section-title">서버 설정</h3>
+                    <p class="sm-section-desc">변경 후 서버를 재시작해야 적용됩니다.</p>
+
+                    <div class="sm-field-row">
+                        <div class="sm-field">
+                            <label>포트</label>
+                            <input type="number" id="set-port" min="1" max="65535">
+                        </div>
+                        <div class="sm-field">
+                            <label>세션 유효 (시간)</label>
+                            <input type="number" id="set-expire" min="1" max="720">
+                        </div>
+                    </div>
+
+                    <div class="sm-divider"></div>
+
+                    <h3 class="sm-section-title">로그아웃</h3>
+                    <p class="sm-section-desc">현재 세션 토큰을 즉시 만료시키고 로그인 화면으로 돌아갑니다.</p>
+                    <button class="sm-btn ghost" id="set-logout">로그아웃</button>
+                </div>
+            </div>
+
+            <footer class="sm-footer">
+                <span class="save-status" id="set-save-msg"></span>
+                <div class="sm-footer-actions">
+                    <button class="sm-btn ghost" id="settings-cancel">닫기</button>
+                    <button class="sm-btn" id="settings-save">저장</button>
+                </div>
+            </footer>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+"use strict";
+
+// ─── DOM 캐시 ───
+const $ = id => document.getElementById(id);
+const imgEl      = $("screen-img");
+const viewer     = $("viewer");
+const statusDot  = $("status-dot");
+const statusText = $("status-text");
+const textInput  = $("text-input");
+const inputBar   = $("input-bar");
+const dragBox    = $("drag-box");
+
+// ─── 상태 ───
+let token = null;
+let serverW = 0, serverH = 0;
+let refreshTimer = null;
+let refreshing = false;
+let pendingRefresh = null;
+
+let kbMode = false;
+let dragMode = false;
+let rclickMode = false;
+
+// 핀치 줌 상태
+let viewState = { scale: 1, x: 0, y: 0 };
+let pinchStart = null;
+
+// ─── 햅틱 피드백 ───
+function haptic(ms) {
+    if (navigator.vibrate) navigator.vibrate(ms || 10);
+}
+
+// ─── 토큰 영속화 (페이지 새로고침해도 로그인 유지) ───
+const TOKEN_KEY = "rd_token";
+const TOKEN_EXP_KEY = "rd_token_exp";
+
+function saveToken(t, expiresInSec) {
+    token = t;
+    try {
+        localStorage.setItem(TOKEN_KEY, t);
+        localStorage.setItem(TOKEN_EXP_KEY, String(Date.now() + expiresInSec * 1000));
+    } catch (e) {}
+}
+
+function loadToken() {
+    try {
+        const t = localStorage.getItem(TOKEN_KEY);
+        const exp = parseInt(localStorage.getItem(TOKEN_EXP_KEY) || "0");
+        if (t && exp > Date.now()) { token = t; return true; }
+    } catch (e) {}
+    return false;
+}
+
+function clearToken() {
+    token = null;
+    try {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(TOKEN_EXP_KEY);
+    } catch (e) {}
+}
+
+// ─── API ───
+async function api(method, path, body) {
+    const opts = { method, headers: {} };
+    if (token) opts.headers["Authorization"] = "Bearer " + token;
+    if (body) {
+        opts.headers["Content-Type"] = "application/json";
+        opts.body = JSON.stringify(body);
+    }
+    const res = await fetch(path, opts);
+    if (res.status === 401) { clearToken(); showLogin(); throw new Error("인증 만료"); }
+    if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.detail || "요청 실패");
+    }
+    return res;
+}
+
+// 조작 후 스크린샷 갱신 (중복 병합)
+function scheduleRefresh(ms) {
+    if (pendingRefresh) clearTimeout(pendingRefresh);
+    pendingRefresh = setTimeout(() => { pendingRefresh = null; refreshScreenshot(); }, ms || 150);
+}
+
+// ─── 로그인 ───
+async function doLogin() {
+    const pw = $("pw").value;
+    const err = $("login-error");
+    const btn = $("login-btn");
+    if (!pw) { err.textContent = "비밀번호를 입력하세요"; return; }
+
+    btn.disabled = true; btn.textContent = "로그인 중..."; err.textContent = "";
+    try {
+        const res = await fetch("/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password: pw }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "로그인 실패");
+        saveToken(data.token, data.expires_in || 86400);
+        showDesktop();
+    } catch (e) {
+        err.textContent = e.message;
+    } finally {
+        btn.disabled = false; btn.textContent = "로그인";
+    }
+}
+
+$("login-btn").addEventListener("click", doLogin);
+$("pw").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+
+// ─── 화면 전환 ───
+function showLogin() {
+    $("login-screen").style.display = "flex";
+    $("desktop-screen").style.display = "none";
+    stopRefresh();
+    kbMode = false; updateKbUI();
+}
+
+function showDesktop() {
+    $("login-screen").style.display = "none";
+    $("desktop-screen").style.display = "flex";
+    $("pw").value = "";
+    fetchInfo();
+    startRefresh();
+}
+
+// 페이지 로드 시 저장된 토큰이 있으면 자동 로그인
+if (loadToken()) {
+    showDesktop();
+}
+
+async function fetchInfo() {
+    try {
+        const data = await (await api("GET", "/info")).json();
+        serverW = data.width;
+        serverH = data.height;
+        $("res-text").textContent = serverW + " x " + serverH;
+    } catch (e) { /* 첫 스크린샷으로 대체 가능 */ }
+}
+
+// ─── 스크린샷 ───
+// 연속 폴링 방식: 이전 응답 완료 → 딜레이 → 다음 요청 (겹침 없이 최대 속도)
+let refreshRunning = false;
+
+function startRefresh() {
+    if (refreshRunning) return;
+    refreshRunning = true;
+    refreshLoop();
+}
+function stopRefresh() {
+    refreshRunning = false;
+    if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
+}
+
+async function refreshLoop() {
+    if (!refreshRunning || !token) return;
+    await refreshScreenshot();
+    if (!refreshRunning) return;
+    const delay = parseInt($("sl-refresh").value);
+    refreshTimer = setTimeout(refreshLoop, delay);
+}
+
+async function refreshScreenshot() {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+        statusDot.className = "load";
+        const q = $("sl-quality").value;
+        const s = $("sel-scale").value;
+        const res = await fetch("/screenshot?quality=" + q + "&scale=" + s + "&t=" + Date.now(), {
+            headers: { "Authorization": "Bearer " + token },
+        });
+        if (res.status === 401) { statusDot.className = ""; clearToken(); showLogin(); return; }
+        if (!res.ok) throw new Error();
+
+        const blob = await res.blob();
+        const oldSrc = imgEl.src;
+        imgEl.src = URL.createObjectURL(blob);
+        if (oldSrc && oldSrc.startsWith("blob:")) URL.revokeObjectURL(oldSrc);
+
+        statusDot.className = "";
+        statusText.textContent = "연결됨";
+    } catch {
+        statusDot.className = "err";
+        statusText.textContent = "연결 끊김";
+    } finally {
+        refreshing = false;
+    }
+}
+
+// 컨트롤 변경
+$("sl-refresh").addEventListener("input", function() {
+    $("val-refresh").textContent = (this.value / 1000).toFixed(1) + "s";
+    // 딜레이 값만 바꿈 — 루프는 다음 사이클에서 자동 반영
+});
+$("sl-quality").addEventListener("input", function() {
+    $("val-quality").textContent = this.value;
+});
+$("sel-scale").addEventListener("change", () => scheduleRefresh(50));
+
+// ─── 좌표 변환 ───
+// getBoundingClientRect는 CSS transform을 반영한 시각적 사각형을 반환하므로
+// 줌인된 상태에서도 정확한 비율을 계산할 수 있음.
+function toServer(cx, cy) {
+    const r = imgEl.getBoundingClientRect();
+    const rx = Math.max(0, Math.min(1, (cx - r.left) / r.width));
+    const ry = Math.max(0, Math.min(1, (cy - r.top) / r.height));
+    return { x: Math.round(rx * serverW), y: Math.round(ry * serverH) };
+}
+
+// ─── 핀치 줌 transform ───
+function applyTransform() {
+    imgEl.style.transform = `translate(${viewState.x}px, ${viewState.y}px) scale(${viewState.scale})`;
+    const zi = $("zoom-indicator");
+    if (viewState.scale > 1.01) {
+        zi.textContent = Math.round(viewState.scale * 100) + "%";
+        zi.classList.add("on");
+    } else {
+        zi.classList.remove("on");
+    }
+}
+
+function resetZoom() {
+    viewState = { scale: 1, x: 0, y: 0 };
+    applyTransform();
+}
+
+// ─── 클릭 표시 ───
+function showRing(cx, cy) {
+    const r = viewer.getBoundingClientRect();
+    const el = document.createElement("div");
+    el.className = "click-ring";
+    el.style.left = (cx - r.left) + "px";
+    el.style.top  = (cy - r.top) + "px";
+    viewer.appendChild(el);
+    el.addEventListener("animationend", () => el.remove());
+}
+
+// 키보드 모드 유지: 화면 클릭/터치로 textInput이 blur되어
+// 모바일 가상 키보드가 사라지는 것을 방지
+function keepKbFocus() {
+    if (kbMode) setTimeout(() => textInput.focus(), 0);
+}
+
+// ─── 데스크탑: 클릭 ───
+// 더블클릭 문제 해결: click에 짧은 타이머, dblclick이 오면 취소
+let clickTimer = null;
+let clickCoord = null;
+
+imgEl.addEventListener("click", function(e) {
+    if (dragMode) return;
+    e.preventDefault();
+
+    const coord = toServer(e.clientX, e.clientY);
+
+    // dblclick 판정 대기 (200ms — 브라우저 dblclick 기본 간격보다 짧게)
+    if (clickTimer) return; // 이미 대기 중이면 무시 (두 번째 click)
+    clickCoord = { cx: e.clientX, cy: e.clientY, coord };
+    clickTimer = setTimeout(() => {
+        clickTimer = null;
+        if (!clickCoord) return;
+        // 콜백 실행 시점에 dragMode가 켜졌을 수 있음 → 재확인
+        if (dragMode) { clickCoord = null; return; }
+        showRing(clickCoord.cx, clickCoord.cy);
+        haptic(8);
+        if (rclickMode) {
+            api("POST", "/click", { x: clickCoord.coord.x, y: clickCoord.coord.y, right: true }).catch(() => {});
+            rclickMode = false;
+            $("btn-rclick").classList.remove("on");
+        } else {
+            api("POST", "/click", clickCoord.coord).catch(() => {});
+        }
+        clickCoord = null;
+        scheduleRefresh(150);
+        keepKbFocus();
+    }, 200);
+});
+
+imgEl.addEventListener("dblclick", function(e) {
+    if (dragMode) return;
+    e.preventDefault();
+    // click 타이머 취소 → 싱글 클릭 방지
+    if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; clickCoord = null; }
+    const coord = toServer(e.clientX, e.clientY);
+    showRing(e.clientX, e.clientY);
+    api("POST", "/click", { x: coord.x, y: coord.y, double: true }).catch(() => {});
+    scheduleRefresh(150);
+    keepKbFocus();
+});
+
+// 데스크탑: 우클릭 (contextmenu)
+imgEl.addEventListener("contextmenu", function(e) {
+    e.preventDefault();
+    // click 타이머도 취소
+    if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; clickCoord = null; }
+    const coord = toServer(e.clientX, e.clientY);
+    showRing(e.clientX, e.clientY);
+    api("POST", "/click", { x: coord.x, y: coord.y, right: true }).catch(() => {});
+    scheduleRefresh(150);
+});
+
+// ─── 데스크탑: 스크롤 ───
+imgEl.addEventListener("wheel", function(e) {
+    e.preventDefault();
+    const coord = toServer(e.clientX, e.clientY);
+    const dir = e.deltaY < 0 ? "up" : "down";
+    const amt = Math.max(1, Math.round(Math.abs(e.deltaY) / 30));
+    api("POST", "/scroll", { x: coord.x, y: coord.y, direction: dir, amount: amt }).catch(() => {});
+    scheduleRefresh(200);
+}, { passive: false });
+
+// ─── 데스크탑: 드래그 ───
+let dragging = false, dragStart = null;
+
+imgEl.addEventListener("mousedown", function(e) {
+    if (!dragMode) return;
+    e.preventDefault();
+    dragging = true;
+    dragStart = { cx: e.clientX, cy: e.clientY };
+    dragBox.style.display = "block";
+    dragBox.style.width = "0"; dragBox.style.height = "0";
+});
+
+document.addEventListener("mousemove", function(e) {
+    if (!dragging || !dragStart) return;
+    const vr = viewer.getBoundingClientRect();
+    dragBox.style.left   = (Math.min(dragStart.cx, e.clientX) - vr.left) + "px";
+    dragBox.style.top    = (Math.min(dragStart.cy, e.clientY) - vr.top) + "px";
+    dragBox.style.width  = Math.abs(e.clientX - dragStart.cx) + "px";
+    dragBox.style.height = Math.abs(e.clientY - dragStart.cy) + "px";
+});
+
+document.addEventListener("mouseup", function(e) {
+    if (!dragging || !dragStart) return;
+    dragging = false;
+    dragBox.style.display = "none";
+    const s = toServer(dragStart.cx, dragStart.cy);
+    const end = toServer(e.clientX, e.clientY);
+    dragStart = null;
+    if (Math.abs(end.x - s.x) < 5 && Math.abs(end.y - s.y) < 5) return;
+    api("POST", "/drag", { x1: s.x, y1: s.y, x2: end.x, y2: end.y }).catch(() => {});
+    scheduleRefresh(200);
+});
+
+// ─── 툴바 버튼 ───
+$("btn-drag").addEventListener("click", () => {
+    dragMode = !dragMode;
+    $("btn-drag").classList.toggle("on", dragMode);
+    imgEl.style.cursor = dragMode ? "move" : "crosshair";
+});
+
+$("btn-rclick").addEventListener("click", () => {
+    rclickMode = !rclickMode;
+    $("btn-rclick").classList.toggle("on", rclickMode);
+});
+
+$("btn-kb").addEventListener("click", () => {
+    kbMode = !kbMode;
+    updateKbUI();
+});
+
+// 퀵 키 패드 토글 (Enter, ESC, 화살표 등 자주 쓰는 키)
+let qkMode = false;
+$("btn-qk").addEventListener("click", () => {
+    qkMode = !qkMode;
+    $("btn-qk").classList.toggle("on", qkMode);
+    $("quick-keys").classList.toggle("on", qkMode);
+});
+
+// 퀵 키 클릭 → 해당 키 전송
+document.querySelectorAll("#quick-keys .qk[data-key]").forEach(btn => {
+    btn.addEventListener("click", function(e) {
+        e.preventDefault();
+        const k = this.dataset.key;
+        haptic(10);
+        api("POST", "/key", { key: k, modifiers: [] }).catch(() => {});
+        scheduleRefresh(150);
+    });
+});
+
+// 단축키 패드 토글
+let skMode = false;
+$("btn-sk").addEventListener("click", () => {
+    skMode = !skMode;
+    $("btn-sk").classList.toggle("on", skMode);
+    $("shortcut-keys").classList.toggle("on", skMode);
+});
+
+// 단축키 클릭 → 해당 단축키 전송
+document.querySelectorAll("#shortcut-keys .sk").forEach(btn => {
+    btn.addEventListener("click", function(e) {
+        e.preventDefault();
+        const k = this.dataset.key;
+        const m = this.dataset.mod;
+        haptic(10);
+        api("POST", "/key", { key: k, modifiers: m ? [m] : [] }).catch(() => {});
+        scheduleRefresh(200);
+    });
+});
+
+// 전체화면 토글
+$("btn-fs").addEventListener("click", async () => {
+    try {
+        if (!document.fullscreenElement) {
+            await document.documentElement.requestFullscreen();
+            $("btn-fs").classList.add("on");
+        } else {
+            await document.exitFullscreen();
+            $("btn-fs").classList.remove("on");
+        }
+    } catch (e) {
+        // iOS Safari는 fullscreen API 미지원 → "홈 화면에 추가"로 대체
+        alert("전체화면을 사용하려면 Safari 공유 → '홈 화면에 추가'를 사용하세요.");
+    }
+});
+document.addEventListener("fullscreenchange", () => {
+    $("btn-fs").classList.toggle("on", !!document.fullscreenElement);
+});
+
+function updateKbUI() {
+    $("btn-kb").classList.toggle("on", kbMode);
+    inputBar.classList.toggle("on", kbMode);
+    $("desktop-screen").classList.toggle("kb-on", kbMode);
+    if (kbMode) {
+        textInput.focus();
+    } else {
+        textInput.blur();
+        textInput.value = "";
+    }
+}
+
+// ─── 키보드 입력 ───
+// 브라우저 단축키 패스스루 (가로채지 않음)
+const PASSTHROUGH = new Set([
+    "meta+w","meta+t","meta+n","meta+q","meta+l","meta+r",
+    "meta+shift+t","meta+shift+n","meta+shift+i","meta+alt+i",
+    "control+w","control+t","control+n","control+l",
+    "control+shift+t","control+shift+n","control+shift+i","control+shift+j",
+]);
+
+function shortcutKey(e) {
+    const p = [];
+    if (e.metaKey) p.push("meta");
+    if (e.ctrlKey) p.push("control");
+    if (e.shiftKey) p.push("shift");
+    if (e.altKey) p.push("alt");
+    p.push(e.key.toLowerCase());
+    return p.join("+");
+}
+
+document.addEventListener("keydown", function(e) {
+    if (!token) return;
+    // 설정 모달이 열려 있으면 키보드 처리는 모달에 위임
+    const settingsOpen = document.getElementById("settings-overlay").classList.contains("on");
+    if (settingsOpen) return;
+    // ESC → 키보드 모드 토글 (항상 동작)
+    if (e.key === "Escape") { kbMode = !kbMode; updateKbUI(); return; }
+    if (!kbMode) return;
+    // 로그인 input에 포커스일 때는 무시
+    if (e.target === $("pw")) return;
+    // 브라우저 단축키 통과
+    if (PASSTHROUGH.has(shortcutKey(e))) return;
+
+    e.preventDefault();
+    // modifier 키 자체는 전송하지 않음
+    if (["Meta","Control","Shift","Alt"].includes(e.key)) return;
+
+    const mods = [];
+    if (e.metaKey) mods.push("command");
+    if (e.ctrlKey) mods.push("ctrl");
+    if (e.shiftKey) mods.push("shift");
+    if (e.altKey) mods.push("alt");
+
+    const KEY_MAP = {
+        Enter:"enter",Backspace:"backspace",Tab:"tab",
+        ArrowUp:"up",ArrowDown:"down",ArrowLeft:"left",ArrowRight:"right",
+        Delete:"delete",Home:"home",End:"end",
+        PageUp:"pageup",PageDown:"pagedown"," ":"space",
+        CapsLock:"capslock",
+        F1:"f1",F2:"f2",F3:"f3",F4:"f4",F5:"f5",F6:"f6",
+        F7:"f7",F8:"f8",F9:"f9",F10:"f10",F11:"f11",F12:"f12",
+    };
+    api("POST", "/key", { key: KEY_MAP[e.key] || e.key.toLowerCase(), modifiers: mods }).catch(() => {});
+    scheduleRefresh(150);
+});
+
+// ─── 입력 바: 명시적 전송 방식 ───
+// 한글 IME 조합을 깨지지 않게 처리하기 위해 자동 전송하지 않고
+// "전송" 버튼이나 Enter를 눌러야 보냄.
+
+function sendText() {
+    if (!token) return;
+    const t = textInput.value;
+    if (!t) return;
+    api("POST", "/type", { text: t }).catch(() => {});
+    textInput.value = "";
+    scheduleRefresh(200);
+}
+
+$("send-btn").addEventListener("click", function(e) {
+    e.preventDefault();
+    sendText();
+    textInput.focus();  // 키보드 유지
+});
+
+// Enter: 입력된 텍스트를 전송한 뒤 Enter 키 이벤트도 함께 전송
+// (네이버 검색창 등에서 자연스럽게 검색 실행)
+// ESC: 키보드 모드 종료
+textInput.addEventListener("keydown", function(e) {
+    if (!kbMode || !token) return;
+
+    // ESC는 document 핸들러로 흘려보내야 키보드 모드 종료 가능
+    if (e.key === "Escape") return;
+
+    // 그 외 키는 textInput 자체 편집용 — document로 전파 방지
+    e.stopPropagation();
+
+    if (e.key === "Enter") {
+        e.preventDefault();
+        const hadText = !!textInput.value;
+        if (hadText) sendText();
+        // 텍스트 전송 후 약간 대기 → Enter 키 전송 (붙여넣기 완료 후)
+        setTimeout(() => {
+            api("POST", "/key", { key: "enter", modifiers: [] }).catch(() => {});
+            scheduleRefresh(200);
+        }, hadText ? 150 : 0);
+    }
+});
+
+// Tab 버튼
+$("kb-tab").addEventListener("click", function(e) {
+    e.preventDefault();
+    if (textInput.value) sendText();
+    setTimeout(() => {
+        api("POST", "/key", { key: "tab", modifiers: [] }).catch(() => {});
+        scheduleRefresh(150);
+    }, textInput.value ? 150 : 0);
+    textInput.focus();
+});
+
+// Backspace 버튼: 입력 바에 텍스트가 있으면 그 글자만 지움, 없으면 맥에 Backspace 전송
+$("kb-back").addEventListener("click", function(e) {
+    e.preventDefault();
+    if (textInput.value) {
+        textInput.value = textInput.value.slice(0, -1);
+    } else {
+        api("POST", "/key", { key: "backspace", modifiers: [] }).catch(() => {});
+        scheduleRefresh(150);
+    }
+    textInput.focus();
+});
+
+// ─── 모바일 터치 ───
+let touchStart = null;   // {x, y, time}
+let touchMoved = false;
+let longPress = null;
+
+// 터치 상태 전체 초기화
+function resetTouch() {
+    if (longPress) { clearTimeout(longPress); longPress = null; }
+    touchStart = null;
+    touchMoved = false;
+    dragBox.style.display = "none";
+}
+
+imgEl.addEventListener("touchstart", function(e) {
+    // 2손가락 → 핀치 줌 시작
+    if (e.touches.length === 2) {
+        e.preventDefault();
+        resetTouch();  // 단일 터치 상태 취소
+        const t1 = e.touches[0], t2 = e.touches[1];
+        const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        const cx = (t1.clientX + t2.clientX) / 2;
+        const cy = (t1.clientY + t2.clientY) / 2;
+        pinchStart = {
+            dist, cx, cy,
+            scale: viewState.scale,
+            x: viewState.x, y: viewState.y,
+        };
+        return;
+    }
+    // 3개 이상 → 무시
+    if (e.touches.length !== 1) { resetTouch(); pinchStart = null; return; }
+
+    e.preventDefault();
+    const t = e.touches[0];
+    touchStart = { x: t.clientX, y: t.clientY, time: Date.now() };
+    touchMoved = false;
+
+    // 길게 누르기 (500ms) → 우클릭
+    longPress = setTimeout(() => {
+        longPress = null;
+        if (!touchMoved && touchStart) {
+            const c = toServer(touchStart.x, touchStart.y);
+            showRing(touchStart.x, touchStart.y);
+            haptic(30);  // 길게 누르기 햅틱
+            api("POST", "/click", { x: c.x, y: c.y, right: true }).catch(() => {});
+            scheduleRefresh(150);
+            touchStart = null;
+        }
+    }, 500);
+}, { passive: false });
+
+imgEl.addEventListener("touchmove", function(e) {
+    // 2손가락 → 핀치 줌 업데이트
+    if (e.touches.length === 2 && pinchStart) {
+        e.preventDefault();
+        const t1 = e.touches[0], t2 = e.touches[1];
+        const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        const cx = (t1.clientX + t2.clientX) / 2;
+        const cy = (t1.clientY + t2.clientY) / 2;
+
+        // 줌 배율 (1x ~ 5x)
+        const newScale = Math.max(1, Math.min(5, pinchStart.scale * (dist / pinchStart.dist)));
+
+        // 핀치 중심점 기준 줌 + 손가락 이동에 따른 팬
+        // 중심점이 화면상에서 같은 위치에 머물도록 보정
+        const scaleRatio = newScale / pinchStart.scale;
+        viewState.scale = newScale;
+        viewState.x = pinchStart.x * scaleRatio + (cx - pinchStart.cx * scaleRatio);
+        viewState.y = pinchStart.y * scaleRatio + (cy - pinchStart.cy * scaleRatio);
+
+        // 줌이 1배로 돌아가면 위치 리셋
+        if (newScale <= 1.01) { viewState.x = 0; viewState.y = 0; }
+
+        applyTransform();
+        return;
+    }
+
+    if (e.touches.length !== 1) return;
+    if (!touchStart) return;
+    e.preventDefault();
+    const t = e.touches[0];
+    const dx = t.clientX - touchStart.x;
+    const dy = t.clientY - touchStart.y;
+
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+        touchMoved = true;
+        if (longPress) { clearTimeout(longPress); longPress = null; }
+
+        if (dragMode) {
+            const vr = viewer.getBoundingClientRect();
+            dragBox.style.display = "block";
+            dragBox.style.left   = (Math.min(touchStart.x, t.clientX) - vr.left) + "px";
+            dragBox.style.top    = (Math.min(touchStart.y, t.clientY) - vr.top) + "px";
+            dragBox.style.width  = Math.abs(dx) + "px";
+            dragBox.style.height = Math.abs(dy) + "px";
+        }
+    }
+}, { passive: false });
+
+// 더블탭으로 줌 리셋
+let lastTapTime = 0;
+
+imgEl.addEventListener("touchend", function(e) {
+    // 핀치 줌 종료
+    if (pinchStart && e.touches.length < 2) {
+        pinchStart = null;
+        if (e.touches.length === 0) return;  // 두 손가락 모두 떼면 종료
+        // 한 손가락만 남으면 새 touchStart로 처리하지 않음
+        return;
+    }
+
+    if (longPress) { clearTimeout(longPress); longPress = null; }
+    if (!touchStart) return;
+
+    // 아직 다른 손가락이 남아있으면 무시
+    if (e.touches.length > 0) { resetTouch(); return; }
+
+    if (!touchMoved) {
+        // 더블탭 감지 (300ms 이내)
+        const now = Date.now();
+        if (now - lastTapTime < 300 && viewState.scale > 1.01) {
+            // 줌 인된 상태에서 더블탭 → 줌 리셋
+            resetZoom();
+            haptic(15);
+            lastTapTime = 0;
+            touchStart = null;
+            touchMoved = false;
+            return;
+        }
+        lastTapTime = now;
+
+        // 탭 → 클릭
+        const c = toServer(touchStart.x, touchStart.y);
+        showRing(touchStart.x, touchStart.y);
+        haptic(8);
+        if (rclickMode) {
+            api("POST", "/click", { x: c.x, y: c.y, right: true }).catch(() => {});
+            rclickMode = false;
+            $("btn-rclick").classList.remove("on");
+        } else {
+            api("POST", "/click", c).catch(() => {});
+        }
+        scheduleRefresh(150);
+    } else if (e.changedTouches.length > 0) {
+        const et = e.changedTouches[0];
+        if (dragMode) {
+            // 드래그 전송
+            dragBox.style.display = "none";
+            const s = toServer(touchStart.x, touchStart.y);
+            const end = toServer(et.clientX, et.clientY);
+            if (Math.abs(end.x - s.x) > 5 || Math.abs(end.y - s.y) > 5) {
+                api("POST", "/drag", { x1: s.x, y1: s.y, x2: end.x, y2: end.y }).catch(() => {});
+                scheduleRefresh(200);
+            }
+        } else {
+            // 스와이프 → 스크롤
+            const dy = et.clientY - touchStart.y;
+            if (Math.abs(dy) > 20) {
+                const c = toServer(touchStart.x, touchStart.y);
+                const dir = dy < 0 ? "down" : "up"; // 위로 밀면 아래로 스크롤
+                const amt = Math.max(1, Math.round(Math.abs(dy) / 40));
+                api("POST", "/scroll", { x: c.x, y: c.y, direction: dir, amount: amt }).catch(() => {});
+                scheduleRefresh(200);
+            }
+        }
+    }
+
+    touchStart = null;
+    touchMoved = false;
+    keepKbFocus();
+}, { passive: false });
+
+// touchcancel: OS가 터치를 가로챌 때 (전화 수신, 알림 배너, 제스처 등)
+imgEl.addEventListener("touchcancel", function() {
+    resetTouch();
+    pinchStart = null;
+}, { passive: false });
+
+// iOS Safari의 시스템 핀치 줌은 차단 (우리가 직접 핀치 줌 처리)
+document.addEventListener("gesturestart", e => e.preventDefault(), { passive: false });
+document.addEventListener("gesturechange", e => e.preventDefault(), { passive: false });
+
+// ─── 설정 모달 ───
+const settingsOverlay = $("settings-overlay");
+const TAB_TITLES = {
+    account: "계정",
+    network: "외부 접속",
+    notify: "알림",
+    system: "권한",
+    advanced: "고급",
+};
+let permPollTimer = null;
+
+function showSetMsg(id, type, text, withSpin) {
+    const el = $(id);
+    if (id === "set-save-msg") {
+        el.className = "save-status " + (type === "ok" ? "ok" : type === "err" ? "err" : "");
+        el.innerHTML = (withSpin ? '<span class="sm-spin"></span> ' : '') + text;
+    } else {
+        el.className = "sm-msg " + type;
+        el.innerHTML = (withSpin ? '<span class="sm-spin"></span>' : '') + text;
+    }
+}
+function clearSetMsg(id) {
+    const el = $(id);
+    if (id === "set-save-msg") {
+        el.className = "save-status";
+        el.innerHTML = "";
+    } else {
+        el.className = "sm-msg";
+        el.innerHTML = "";
+    }
+}
+
+function switchPane(name) {
+    document.querySelectorAll(".sm-tab").forEach(t => t.classList.toggle("active", t.dataset.pane === name));
+    document.querySelectorAll(".sm-pane").forEach(p => p.classList.toggle("active", p.dataset.pane === name));
+    $("sm-title").textContent = TAB_TITLES[name] || "설정";
+    if (name === "system") loadSettingsPermissions();
+}
+
+document.querySelectorAll(".sm-tab").forEach(t => {
+    t.addEventListener("click", () => switchPane(t.dataset.pane));
+});
+
+async function openSettings() {
+    settingsOverlay.classList.add("on");
+    switchPane("account");
+    $("set-pw").value = ""; $("set-pw2").value = "";
+    ["set-save-msg","set-ngrok-msg","set-tg-msg"].forEach(clearSetMsg);
+
+    try {
+        const cfg = await (await api("GET", "/api/config")).json();
+        $("set-ngrok").value = cfg.ngrok_authtoken || "";
+        $("set-tg-bot").value = cfg.telegram_bot_token || "";
+        $("set-tg-chat").value = cfg.telegram_chat_id || "";
+        $("set-port").value = cfg.port || 8000;
+        $("set-expire").value = cfg.token_expire_hours || 24;
+
+        // ngrok 상태 카드 업데이트
+        const dot = $("sm-ngrok-dot");
+        const state = $("sm-ngrok-state");
+        const urlRow = $("sm-ngrok-url-row");
+        if (cfg.ngrok_url) {
+            dot.classList.add("on");
+            state.textContent = "외부 접속 활성";
+            $("sm-ngrok-url").textContent = cfg.ngrok_url;
+            urlRow.style.display = "flex";
+        } else if (cfg.ngrok_authtoken) {
+            dot.classList.remove("on");
+            state.textContent = "토큰 저장됨 — 다음 시작 시 활성화";
+            urlRow.style.display = "none";
+        } else {
+            dot.classList.remove("on");
+            state.textContent = "비활성 (로컬 전용)";
+            urlRow.style.display = "none";
+        }
+    } catch (e) {}
+
+    // macOS 권한 탭 자동 표시/숨김
+    try {
+        const status = await (await fetch("/api/status")).json();
+        $("sm-tab-system").style.display = status.platform === "Darwin" ? "" : "none";
+    } catch (e) {}
+}
+
+function closeSettings() {
+    settingsOverlay.classList.remove("on");
+    if (permPollTimer) { clearInterval(permPollTimer); permPollTimer = null; }
+}
+
+async function loadSettingsPermissions() {
+    try {
+        const status = await (await fetch("/api/status")).json();
+        if (status.platform !== "Darwin") return;
+        const r = await (await api("GET", "/api/permissions")).json();
+        const sc = $("set-perm-screen");
+        const ac = $("set-perm-acc");
+        sc.classList.toggle("ok", r.screen_recording);
+        sc.querySelector(".sm-perm-icon").textContent = r.screen_recording ? "✓" : "🖼";
+        ac.classList.toggle("ok", r.accessibility);
+        ac.querySelector(".sm-perm-icon").textContent = r.accessibility ? "✓" : "🖱";
+    } catch (e) {}
+    if (!permPollTimer) permPollTimer = setInterval(loadSettingsPermissions, 4000);
+}
+
+$("btn-settings").addEventListener("click", openSettings);
+$("settings-close").addEventListener("click", closeSettings);
+$("settings-cancel").addEventListener("click", closeSettings);
+settingsOverlay.addEventListener("click", e => {
+    if (e.target === settingsOverlay) closeSettings();
+});
+document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && settingsOverlay.classList.contains("on")) {
+        closeSettings();
+    }
+});
+
+// ngrok 테스트
+$("set-test-ngrok").addEventListener("click", async function() {
+    const t = $("set-ngrok").value.trim();
+    if (!t) { showSetMsg("set-ngrok-msg", "err", "토큰을 입력하세요"); return; }
+    this.disabled = true;
+    showSetMsg("set-ngrok-msg", "info", " 터널 테스트 중... (5~10초)", true);
+    try {
+        const r = await (await api("POST", "/api/test-ngrok", { token: t })).json();
+        if (r.ok) showSetMsg("set-ngrok-msg", "ok", "✓ " + r.message);
+        else showSetMsg("set-ngrok-msg", "err", "✗ " + r.message);
+    } catch (e) {
+        showSetMsg("set-ngrok-msg", "err", "✗ " + e.message);
+    } finally { this.disabled = false; }
+});
+
+// 텔레그램 자동 Chat ID + 테스트
+async function autoFetchChatId(botToken) {
+    try {
+        const r = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates`);
+        const d = await r.json();
+        if (d.ok && d.result.length) {
+            for (let i = d.result.length - 1; i >= 0; i--) {
+                const m = d.result[i].message || d.result[i].edited_message;
+                if (m && m.chat && m.chat.id) return String(m.chat.id);
+            }
+        }
+    } catch (e) {}
+    return null;
+}
+
+$("set-test-tg").addEventListener("click", async function() {
+    const bt = $("set-tg-bot").value.trim();
+    let ci = $("set-tg-chat").value.trim();
+    if (!bt) { showSetMsg("set-tg-msg", "err", "봇 토큰이 필요해요"); return; }
+    this.disabled = true;
+    if (!ci) {
+        showSetMsg("set-tg-msg", "info", " Chat ID 자동 탐색 중...", true);
+        ci = await autoFetchChatId(bt);
+        if (ci) {
+            $("set-tg-chat").value = ci;
+        } else {
+            showSetMsg("set-tg-msg", "err", "✗ Chat ID 자동 탐색 실패 — 봇한테 메시지 한 번 보낸 후 재시도");
+            this.disabled = false; return;
+        }
+    }
+    showSetMsg("set-tg-msg", "info", " 전송 중...", true);
+    try {
+        const r = await (await api("POST", "/api/test-telegram", { bot_token: bt, chat_id: ci })).json();
+        if (r.ok) showSetMsg("set-tg-msg", "ok", "✓ 전송됨 — 텔레그램에서 확인하세요");
+        else showSetMsg("set-tg-msg", "err", "✗ " + r.message);
+    } catch (e) {
+        showSetMsg("set-tg-msg", "err", "✗ " + e.message);
+    } finally { this.disabled = false; }
+});
+
+// 권한 설정 열기 버튼
+document.querySelectorAll(".settings-modal [data-which]").forEach(btn => {
+    btn.addEventListener("click", async function() {
+        try {
+            await (await api("POST", "/api/open-settings", { which: this.dataset.which })).json();
+            setTimeout(loadSettingsPermissions, 1500);
+        } catch (e) {}
+    });
+});
+
+// 로그아웃
+$("set-logout").addEventListener("click", () => {
+    closeSettings();
+    clearToken();
+    showLogin();
+});
+
+// 저장
+$("settings-save").addEventListener("click", async function() {
+    const pw = $("set-pw").value;
+    const pw2 = $("set-pw2").value;
+    if (pw && pw !== pw2) { showSetMsg("set-save-msg", "err", "비밀번호가 일치하지 않아요"); return; }
+    if (pw && pw.length < 4) { showSetMsg("set-save-msg", "err", "비밀번호는 4자 이상"); return; }
+
+    const body = {
+        ngrok_authtoken: $("set-ngrok").value.trim(),
+        telegram_bot_token: $("set-tg-bot").value.trim(),
+        telegram_chat_id: $("set-tg-chat").value.trim(),
+        port: parseInt($("set-port").value) || 8000,
+        token_expire_hours: parseInt($("set-expire").value) || 24,
+    };
+    if (pw) body.password = pw;
+
+    this.disabled = true;
+    showSetMsg("set-save-msg", "info", " 저장 중...", true);
+    try {
+        await (await api("POST", "/api/config", body)).json();
+        showSetMsg("set-save-msg", "ok", "✓ 저장됨" + (pw ? " — 다음 로그인부터 적용" : ""));
+        setTimeout(() => { closeSettings(); clearSetMsg("set-save-msg"); }, 1200);
+    } catch (e) {
+        showSetMsg("set-save-msg", "err", "✗ " + e.message);
+    } finally { this.disabled = false; }
+});
+
+})();
+</script>
+</body>
+</html>

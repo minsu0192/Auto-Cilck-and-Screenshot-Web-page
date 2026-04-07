@@ -1,0 +1,28 @@
+# 환경 변수 (비밀번호 해시, 토큰 등 — 절대 커밋 금지)
+.env
+.env.tmp
+
+# Python 가상환경
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# 빌드 산출물
+build/
+dist/
+*.egg-info/
+
+# 로그
+*.log
+access.log
+server.log
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
