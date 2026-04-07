@@ -1,6 +1,6 @@
 #!/bin/bash
 # RemoteDesktop.app 빌드 스크립트
-# 실행하면 ~/Applications/RemoteDesktop.app 가 생성됩니다.
+# 실행하면 /Applications/RemoteDesktop.app 가 생성됩니다.
 # 그 후로는 Spotlight나 Launchpad에서 "Remote Desktop"으로 실행할 수 있습니다.
 
 set -e
@@ -8,16 +8,22 @@ cd "$(dirname "$0")"
 PROJECT_DIR="$(pwd)"
 
 APP_NAME="RemoteDesktop"
-APP_PATH="$HOME/Applications/$APP_NAME.app"
+INSTALL_PATH="/Applications/$APP_NAME.app"
+# 빌드는 임시 위치에서 (sudo 없이), 마지막에 한 번에 /Applications/로 이동
+BUILD_PATH="$(mktemp -d)/$APP_NAME.app"
+
+# 정리 트랩 — 빌드 실패해도 임시 디렉토리 청소
+trap 'rm -rf "$(dirname "$BUILD_PATH")"' EXIT
+
+# 빌드 중에는 BUILD_PATH를 사용 (스크립트 나머지 부분과 호환)
+APP_PATH="$BUILD_PATH"
 
 echo ""
 echo "🛠  $APP_NAME.app 빌드 중..."
 echo "   프로젝트: $PROJECT_DIR"
-echo "   설치 위치: $APP_PATH"
+echo "   설치 위치: $INSTALL_PATH"
 echo ""
 
-# 기존 .app 정리
-rm -rf "$APP_PATH"
 mkdir -p "$APP_PATH/Contents/MacOS"
 mkdir -p "$APP_PATH/Contents/Resources"
 
@@ -214,11 +220,33 @@ PYEOF
     rm -rf "$TMP_DIR"
 fi
 
-# ~/Applications 디렉토리 생성 (없으면)
-mkdir -p "$HOME/Applications"
+# ─── /Applications/ 로 설치 ───
+# /Applications/는 시스템 폴더라 sudo가 필요함. 한 번만 비밀번호 묻고 끝.
+echo ""
+echo "📦 /Applications/ 로 설치합니다..."
+echo "   (시스템 폴더라서 macOS 비밀번호를 한 번 요청합니다)"
+echo ""
+
+if ! sudo rm -rf "$INSTALL_PATH"; then
+    echo "❌ 기존 앱 제거 실패"
+    exit 1
+fi
+
+if ! sudo mv "$BUILD_PATH" "$INSTALL_PATH"; then
+    echo "❌ 설치 실패 — 권한을 확인하세요"
+    exit 1
+fi
+
+# 소유권을 현재 사용자로 (앱 안의 launcher가 사용자 권한으로 동작해야 함)
+sudo chown -R "$(whoami):staff" "$INSTALL_PATH" 2>/dev/null || true
+
+# Gatekeeper의 quarantine 속성 제거 — 첫 실행 시 "확인되지 않은 개발자" 경고 방지
+sudo xattr -dr com.apple.quarantine "$INSTALL_PATH" 2>/dev/null || true
 
 echo ""
-echo "✅ 빌드 완료!"
+echo "✅ 빌드 + 설치 완료!"
+echo ""
+echo "   위치: $INSTALL_PATH"
 echo ""
 echo "   사용법:"
 echo "   1. Spotlight (Cmd+Space) → 'Remote Desktop' 검색 → Enter"
